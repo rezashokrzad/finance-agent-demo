@@ -1,0 +1,22 @@
+FICTIONAL SAMPLE - NOT A REAL FINANCIAL REPORT
+Northwind Teaching Co. (fictional company)
+Monthly financial report
+Period: 2026-03-01 to 2026-03-31
+Report date: 2026-03-31
+Currency: EUR
+
+Revenue: 12400.00 EUR
+Cost of goods sold: 4960.00 EUR
+Gross profit: 7440.00 EUR
+Operating expenses: 2480.00 EUR
+Supplies: 520.30 EUR
+Travel: 58.08 EUR
+Other operating expenses: 1901.62 EUR
+Operating income: 4960.00 EUR
+Income tax: 1041.60 EUR
+Net income: 3918.40 EUR
+
+Supplies is Harbor Supply Co. invoice INV-2026-0315 dated 2026-03-15.
+Travel is the Metro Transit rail fare dated 2026-03-18.
+Income tax is 21% of operating income.
+Prepared for a classroom demonstration only. These are not real books.

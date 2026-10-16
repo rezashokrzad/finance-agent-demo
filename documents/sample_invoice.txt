@@ -1,0 +1,23 @@
+FICTIONAL SAMPLE - NOT A REAL INVOICE
+Northwind Teaching Co. (fictional company)
+
+Supplier invoice
+Invoice number: INV-2026-0315
+Invoice date: 2026-03-15
+Due date: 2026-04-14
+Currency: EUR
+
+Vendor: Harbor Supply Co. (fictional supplier)
+Bill to: Northwind Teaching Co.
+
+Description: Office supplies for the March teaching workshop
+
+Line items:
+- Printer paper, 20 reams x 12.50 EUR = 250.00 EUR
+- Printer toner, 4 cartridges x 45.00 EUR = 180.00 EUR
+
+Subtotal: 430.00 EUR
+Tax (VAT 21%): 90.30 EUR
+Total amount due: 520.30 EUR
+
+This document is fictional and is not a real invoice.
