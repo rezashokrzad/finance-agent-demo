@@ -22,6 +22,7 @@ from models import (
     analyze_with_model1,
     blank_metrics,
     classify_with_jev,
+    clean_number,
     extract_with_ollama,
     failed_metric,
     load_settings,
@@ -89,6 +90,7 @@ class WorkflowState(TypedDict):
     extraction: dict
     analysis: dict
     validation: dict
+    grounding: list
     halt: bool
     step_status: dict
     metrics: dict
@@ -283,6 +285,7 @@ def build_initial_state(document_name, document_text):
         "extraction": {},
         "analysis": {},
         "validation": {},
+        "grounding": [],
         "halt": False,
         "step_status": fresh_step_status(),
         "metrics": blank_metrics(),
@@ -482,16 +485,64 @@ def analyze_node(state):
     return with_cost_error(result, "analysis", cost_error)
 
 
+GROUNDED_FIELDS = ("amount", "tax")
+
+
+def source_numbers(text):
+    """Every number written in the text, rounded to cents. '1,234.56' -> 1234.56."""
+    numbers = set()
+    for token in re.findall(r"\d[\d,]*(?:\.\d+)?", text or ""):
+        try:
+            numbers.add(round(float(token.replace(",", "")), 2))
+        except ValueError:
+            continue
+    return numbers
+
+
+def grounding_check(text, extraction):
+    """Deterministic check with no model call: is each extracted figure written in the source?
+
+    It catches figures the local model invented or misread. It cannot tell whether a
+    figure that does appear was put in the right field, and it does not read
+    European formats such as 1.234,56.
+    """
+    numbers = source_numbers(text[:MAX_PROMPT_CHARS] if text else "")
+    checks = []
+    for field in GROUNDED_FIELDS:
+        value = clean_number((extraction or {}).get(field))
+        if not isinstance(value, float):
+            continue
+        checks.append(
+            {"field": field, "value": value, "found_in_source": round(value, 2) in numbers}
+        )
+    return checks
+
+
+def grounding_line(checks):
+    if not checks:
+        return "Grounding check (no model): no numeric fields were extracted to check."
+    missing = [c["field"] for c in checks if not c["found_in_source"]]
+    found = len(checks) - len(missing)
+    line = f"Grounding check (no model): {found} of {len(checks)} extracted figures appear in the source."
+    if missing:
+        line += " Not found in the source: " + ", ".join(missing) + "."
+    return line
+
+
 def validate_node(state):
     if state.get("halt"):
         return skip_step(state, "validation", "validate", "Validation")
     notify("validation", "running")
+    grounding = grounding_check(state["document_text"], state.get("extraction"))
     try:
         settings = load_settings()
     except ConfigError as exc:
-        return fail_step(
+        result = fail_step(
             state, "validation", "validate", str(exc), "model_2", failed_metric(None, None)
         )
+        result["grounding"] = grounding
+        result["logs"] = [grounding_line(grounding)] + result["logs"]
+        return result
     try:
         validation, metric, cost_error = validate_with_model2(
             state["document_text"],
@@ -501,7 +552,7 @@ def validate_node(state):
             settings,
         )
     except ModelError as exc:
-        return fail_step(
+        result = fail_step(
             state,
             "validation",
             "validate",
@@ -509,15 +560,20 @@ def validate_node(state):
             "model_2",
             failed_metric(settings.model_2_model, exc.latency_s),
         )
+        result["grounding"] = grounding
+        result["logs"] = [grounding_line(grounding)] + result["logs"]
+        return result
     status = dict(state["step_status"])
     status["validation"] = "completed"
     metrics = dict(state["metrics"])
     metrics["model_2"] = metric
     result = {
         "validation": validation,
+        "grounding": grounding,
         "step_status": status,
         "metrics": metrics,
         "logs": [
+            grounding_line(grounding),
             "Validation was requested from Claude. This check is advisory, not proof of financial correctness.",
             f"Claude status: {validation['status']}.",
             metric_line("Claude", metric),
