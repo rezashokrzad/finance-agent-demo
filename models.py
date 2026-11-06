@@ -9,6 +9,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from datetime import date
 
 import requests
 from dotenv import load_dotenv
@@ -782,9 +783,15 @@ def extract_with_ollama(text, category, settings):
     return parsed, build_metric("completed", settings.ollama_model, latency, usage, None), None
 
 
+def processing_date():
+    """Today's date, so the models can judge whether a document date lies in the future."""
+    return date.today().isoformat()
+
+
 def analyze_with_model1(text, category, extraction, settings):
     user = (
-        f"Route: {category}\n\n"
+        f"Route: {category}\n"
+        f"Processing date: {processing_date()}\n\n"
         "Extracted JSON:\n"
         f"{dump_json(extraction)}\n\n"
         "Document:\n"
@@ -818,7 +825,8 @@ def analyze_with_model1(text, category, extraction, settings):
 
 def validate_with_model2(text, category, extraction, analysis, settings):
     user = (
-        f"Route: {category}\n\n"
+        f"Route: {category}\n"
+        f"Processing date: {processing_date()}\n\n"
         "Extracted JSON:\n"
         f"{dump_json(extraction)}\n\n"
         "Analysis JSON:\n"

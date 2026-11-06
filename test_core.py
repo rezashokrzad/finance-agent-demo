@@ -32,6 +32,8 @@ from workflow import (
     build_graph,
     build_initial_state,
     finish_node,
+    grounding_check,
+    source_numbers,
     load_document_bytes,
     load_sample,
     rule_classify,
@@ -533,6 +535,61 @@ class DemoTests(unittest.TestCase):
             self.assertIsNone(final["metrics"]["jev"]["estimated_cost_usd"])
             self.assertEqual(final["metrics"]["model_1"]["estimated_cost_usd"], 0.01)
             self.assertIsNone(final["metrics"]["model_2"]["prompt_tokens"])
+
+    def test_source_numbers_reads_thousands_and_decimals(self):
+        numbers = source_numbers("Revenue 12,450.00 EUR, tax 90.30, items 20")
+        self.assertIn(12450.0, numbers)
+        self.assertIn(90.3, numbers)
+        self.assertIn(20.0, numbers)
+
+    def test_grounding_check_flags_figures_missing_from_the_source(self):
+        _name, text = load_sample("sample_invoice.txt")
+        checks = grounding_check(text, extraction_payload())
+        self.assertEqual([c["field"] for c in checks], ["amount", "tax"])
+        self.assertTrue(all(c["found_in_source"] for c in checks))
+
+        checks = grounding_check(text, extraction_payload(amount="999.99", tax=None))
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(checks[0]["field"], "amount")
+        self.assertFalse(checks[0]["found_in_source"])
+
+    def test_prompts_include_the_processing_date(self):
+        settings = settings_from_mapping({"MODEL_1_API_KEY": "model-one-secret-key"})
+        response = json_response(json.dumps(analysis_payload()))
+        with mock.patch("models.processing_date", return_value="2026-03-20"), mock.patch(
+            "models.requests.post", return_value=response
+        ) as post:
+            analyze_with_model1("text", "invoice", extraction_payload(), settings)
+        user = post.call_args.kwargs["json"]["messages"][1]["content"]
+        self.assertIn("Processing date: 2026-03-20", user)
+
+    def test_graph_records_grounding_for_the_validation_step(self):
+        _name, text = load_sample("sample_invoice.txt")
+
+        def classify(text, settings):
+            return (
+                {"category": "invoice", "confidence": 0.9, "reason": "stub"},
+                build_metric("completed", "stub-jev", 0.1, None, None),
+                None,
+            )
+
+        def extract(text, category, settings):
+            return (
+                extraction_payload(amount="999.99"),
+                build_metric("completed", "stub-ollama", 0.2, None, None),
+                None,
+            )
+
+        def analyze(text, category, extraction, settings):
+            return analysis_payload(), build_metric("completed", "stub-1", 0.3, None, None), None
+
+        def validate(text, category, extraction, analysis, settings):
+            return validation_payload(), build_metric("completed", "stub-2", 0.4, None, None), None
+
+        final = self._run_graph(text, classify, extract, analyze, validate)
+        by_field = {c["field"]: c["found_in_source"] for c in final["grounding"]}
+        self.assertEqual(by_field, {"amount": False, "tax": True})
+        self.assertIn("Not found in the source: amount", "\n".join(final["logs"]))
 
     def test_jev_failure_falls_back_and_ollama_failure_stops_later_models(self):
         _name, text = load_sample("sample_invoice.txt")

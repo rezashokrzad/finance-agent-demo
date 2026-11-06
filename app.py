@@ -50,6 +50,7 @@ def idle_state():
         "extraction": {},
         "analysis": {},
         "validation": {},
+        "grounding": [],
         "halt": False,
         "step_status": fresh_step_status(),
         "metrics": {},
@@ -224,6 +225,26 @@ def show_results(target, state, total_seconds, current_name):
             st.write(f"Status: {validation.get('status')}")
             st.write(validation.get("explanation") or "")
             st.json(validation)
+        else:
+            st.write("Not available.")
+
+        st.subheader("Grounding check (no model)")
+        st.caption(
+            "Plain Python: is each extracted figure written somewhere in the source text? "
+            "It catches invented or misread figures. It does not check that a figure is in the right field."
+        )
+        grounding = state.get("grounding") or []
+        if grounding:
+            st.table(
+                [
+                    {
+                        "Field": c["field"],
+                        "Extracted value": f"{c['value']:.2f}",
+                        "Found in source": "yes" if c["found_in_source"] else "NO",
+                    }
+                    for c in grounding
+                ]
+            )
         else:
             st.write("Not available.")
 
